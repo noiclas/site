@@ -1,7 +1,280 @@
 <!DOCTYPE html>
-<html>
-  <head><title>nic arnaud</title></head>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nic arnaud</title>
+    <meta name="description" content="nic personal page">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        background: #000;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+      }
+
+      canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      .center-image {
+        position: relative;
+        z-index: 10;
+        max-width: 300px;
+        max-height: 300px;
+        border-radius: 12px;
+        box-shadow: 0 0 60px rgba(255, 0, 100, 0.5), 0 0 120px rgba(100, 0, 255, 0.3);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .center-image:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 80px rgba(255, 0, 100, 0.7), 0 0 160px rgba(100, 0, 255, 0.5);
+      }
+
+      .audio-controls {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .audio-controls label {
+        color: #fff;
+        font-size: 14px;
+        opacity: 0.8;
+        cursor: pointer;
+        padding: 12px 24px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 30px;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .audio-controls label:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+
+      .audio-controls input[type="file"] {
+        display: none;
+      }
+
+      .now-playing {
+        color: #fff;
+        font-size: 12px;
+        opacity: 0.6;
+        text-align: center;
+        max-width: 250px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .hint {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 12px;
+        z-index: 20;
+        text-align: center;
+      }
+    </style>
+  </head>
   <body>
-    <h1>habibi</h1>
+    <canvas id="visualizer"></canvas>
+    <img src="assets/IMG_2437.jpeg" alt="nic" class="center-image">
+
+    <div class="audio-controls">
+      <label for="audio-file">
+        🎵 Upload music (Die Lit recommended)
+        <input type="file" id="audio-file" accept="audio/*">
+      </label>
+      <div class="now-playing" id="now-playing"></div>
+    </div>
+
+    <p class="hint">Upload your favorite tracks to see the visualizer come alive</p>
+
+    <script>
+      const canvas = document.getElementById('visualizer');
+      const ctx = canvas.getContext('2d');
+      const audioInput = document.getElementById('audio-file');
+      const nowPlaying = document.getElementById('now-playing');
+
+      let audioContext;
+      let analyser;
+      let dataArray;
+      let audio;
+      let isPlaying = false;
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      // Ambient animation when no audio is playing
+      let time = 0;
+      function drawAmbient() {
+        time += 0.01;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const numBars = 64;
+
+        for (let i = 0; i < numBars; i++) {
+          const angle = (i / numBars) * Math.PI * 2;
+          const baseRadius = 180;
+          const variation = Math.sin(time + i * 0.2) * 30 + Math.sin(time * 0.5 + i * 0.1) * 20;
+          const radius = baseRadius + variation;
+          const barHeight = 50 + Math.sin(time * 2 + i * 0.3) * 30;
+
+          const x1 = centerX + Math.cos(angle) * radius;
+          const y1 = centerY + Math.sin(angle) * radius;
+          const x2 = centerX + Math.cos(angle) * (radius + barHeight);
+          const y2 = centerY + Math.sin(angle) * (radius + barHeight);
+
+          const hue = (i / numBars) * 60 + 300 + Math.sin(time) * 30;
+          ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.6)`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+
+        if (!isPlaying) {
+          requestAnimationFrame(drawAmbient);
+        }
+      }
+
+      function draw() {
+        if (!isPlaying) return;
+
+        requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const numBars = dataArray.length / 2;
+
+        // Draw circular visualizer bars
+        for (let i = 0; i < numBars; i++) {
+          const angle = (i / numBars) * Math.PI * 2;
+          const barHeight = dataArray[i] * 1.5;
+          const baseRadius = 180;
+
+          const x1 = centerX + Math.cos(angle) * baseRadius;
+          const y1 = centerY + Math.sin(angle) * baseRadius;
+          const x2 = centerX + Math.cos(angle) * (baseRadius + barHeight);
+          const y2 = centerY + Math.sin(angle) * (baseRadius + barHeight);
+
+          // Gradient from pink/magenta to purple based on frequency
+          const hue = 300 + (dataArray[i] / 255) * 60;
+          const lightness = 50 + (dataArray[i] / 255) * 20;
+          ctx.strokeStyle = `hsl(${hue}, 100%, ${lightness}%)`;
+          ctx.lineWidth = 3;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+
+        // Draw mirrored bars on the inside
+        for (let i = 0; i < numBars; i++) {
+          const angle = (i / numBars) * Math.PI * 2;
+          const barHeight = dataArray[i] * 0.5;
+          const baseRadius = 170;
+
+          const x1 = centerX + Math.cos(angle) * baseRadius;
+          const y1 = centerY + Math.sin(angle) * baseRadius;
+          const x2 = centerX + Math.cos(angle) * (baseRadius - barHeight);
+          const y2 = centerY + Math.sin(angle) * (baseRadius - barHeight);
+
+          const hue = 280 + (dataArray[i] / 255) * 40;
+          ctx.strokeStyle = `hsla(${hue}, 100%, 60%, 0.7)`;
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = 5;
+          ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+
+        ctx.shadowBlur = 0;
+      }
+
+      audioInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        nowPlaying.textContent = `Now playing: ${file.name}`;
+
+        if (audio) {
+          audio.pause();
+          audio.remove();
+        }
+
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          dataArray = new Uint8Array(analyser.frequencyBinCount);
+        }
+
+        audio = new Audio();
+        audio.src = URL.createObjectURL(file);
+
+        const source = audioContext.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        audio.play();
+        isPlaying = true;
+        draw();
+
+        audio.addEventListener('ended', () => {
+          isPlaying = false;
+          nowPlaying.textContent = '';
+          drawAmbient();
+        });
+      });
+
+      // Start ambient animation
+      drawAmbient();
+    </script>
   </body>
 </html>
