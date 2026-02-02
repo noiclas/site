@@ -109,16 +109,17 @@
     <img src="assets/IMG_2437.jpeg" alt="nic" class="center-image">
 
     <div class="audio-controls">
-      <label for="audio-file">
-        🎵 Upload music (Die Lit recommended)
-        <input type="file" id="audio-file" accept="audio/*">
-      </label>
       <div class="now-playing" id="now-playing"></div>
     </div>
 
     <p class="hint">Upload your favorite tracks to see the visualizer come alive</p>
 
     <script>
+      const playlist = [
+      "songs/kid cudi.mp3",
+      "songs/sk8board P.mp3",
+      "songs/slayer.mp3"
+      ];
       const canvas = document.getElementById('visualizer');
       const ctx = canvas.getContext('2d');
       const audioInput = document.getElementById('audio-file');
@@ -133,6 +134,10 @@
       function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+      }
+
+      function pickRandomSong() {
+       return playlist[Math.floor(Math.random() * playlist.length)];
       }
 
       resizeCanvas();
@@ -237,17 +242,7 @@
         ctx.shadowBlur = 0;
       }
 
-      audioInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        nowPlaying.textContent = `Now playing: ${file.name}`;
-
-        if (audio) {
-          audio.pause();
-          audio.remove();
-        }
-
+      async function playRandomSong() {
         if (!audioContext) {
           audioContext = new (window.AudioContext || window.webkitAudioContext)();
           analyser = audioContext.createAnalyser();
@@ -255,26 +250,46 @@
           dataArray = new Uint8Array(analyser.frequencyBinCount);
         }
 
-        audio = new Audio();
-        audio.src = URL.createObjectURL(file);
+        if (audio) {
+          audio.pause();
+          audio.remove();
+        }
+
+        const songSrc = pickRandomSong();
+        const songName = songSrc.split("/").pop();
+
+        nowPlaying.textContent = `Now playing: ${songName}`;
+
+        audio = new Audio(songSrc);
+        audio.crossOrigin = "anonymous";
 
         const source = audioContext.createMediaElementSource(audio);
         source.connect(analyser);
         analyser.connect(audioContext.destination);
 
-        audio.play();
+        await audio.play();
         isPlaying = true;
         draw();
 
-        audio.addEventListener('ended', () => {
+        audio.addEventListener("ended", () => {
           isPlaying = false;
-          nowPlaying.textContent = '';
-          drawAmbient();
+          playRandomSong(); // 🔁 auto-continue forever
         });
-      });
+      }
 
       // Start ambient animation
       drawAmbient();
+
+      // Start music on first user click
+      document.body.addEventListener(
+        "click",
+        () => {
+          if (!isPlaying) {
+            playRandomSong();
+          }
+        },
+        { once: true }
+      );
     </script>
   </body>
 </html>
